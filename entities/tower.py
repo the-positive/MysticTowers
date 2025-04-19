@@ -3,6 +3,86 @@ from core.config import *
 import math
 import os
 
+CANNON_SHOT_SOUND = None
+CANNON_IMPACT_SOUND = None
+ICE_SHOT_SOUND = None
+ICE_IMPACT_SOUND = None
+FIRE_SHOT_SOUND = None
+FIRE_IMPACT_SOUND = None
+
+def load_tower_sounds():
+    global CANNON_SHOT_SOUND, CANNON_IMPACT_SOUND, ICE_SHOT_SOUND, ICE_IMPACT_SOUND, FIRE_SHOT_SOUND, FIRE_IMPACT_SOUND
+    # Cannon
+    if CANNON_SHOT_SOUND is None:
+        shot_path = os.path.join('assets', 'sounds', 'towers', 'cannon_shot.wav')
+        if os.path.exists(shot_path):
+            try:
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+                CANNON_SHOT_SOUND = pygame.mixer.Sound(shot_path)
+            except Exception as e:
+                print(f"Failed to load cannon shot sound: {e}")
+        else:
+            print("Cannon shot sound not found at assets/sounds/towers/cannon_shot.wav")
+    if CANNON_IMPACT_SOUND is None:
+        impact_path = os.path.join('assets', 'sounds', 'towers', 'cannon_impact.wav')
+        if os.path.exists(impact_path):
+            try:
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+                CANNON_IMPACT_SOUND = pygame.mixer.Sound(impact_path)
+            except Exception as e:
+                print(f"Failed to load cannon impact sound: {e}")
+        else:
+            print("Cannon impact sound not found at assets/sounds/towers/cannon_impact.wav")
+    # Ice/Water
+    if ICE_SHOT_SOUND is None:
+        shot_path = os.path.join('assets', 'sounds', 'towers', 'ice_shot.wav')
+        if os.path.exists(shot_path):
+            try:
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+                ICE_SHOT_SOUND = pygame.mixer.Sound(shot_path)
+            except Exception as e:
+                print(f"Failed to load ice shot sound: {e}")
+        else:
+            print("Ice shot sound not found at assets/sounds/towers/ice_shot.wav")
+    if ICE_IMPACT_SOUND is None:
+        impact_path = os.path.join('assets', 'sounds', 'towers', 'ice_impact.wav')
+        if os.path.exists(impact_path):
+            try:
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+                ICE_IMPACT_SOUND = pygame.mixer.Sound(impact_path)
+            except Exception as e:
+                print(f"Failed to load ice impact sound: {e}")
+        else:
+            print("Ice impact sound not found at assets/sounds/towers/ice_impact.wav")
+    # Fire
+    if FIRE_SHOT_SOUND is None:
+        shot_path = os.path.join('assets', 'sounds', 'towers', 'fire_shot.wav')
+        if os.path.exists(shot_path):
+            try:
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+                FIRE_SHOT_SOUND = pygame.mixer.Sound(shot_path)
+            except Exception as e:
+                print(f"Failed to load fire shot sound: {e}")
+        else:
+            print("Fire shot sound not found at assets/sounds/towers/fire_shot.wav")
+    if FIRE_IMPACT_SOUND is None:
+        impact_path = os.path.join('assets', 'sounds', 'towers', 'fire_impact.wav')
+        if os.path.exists(impact_path):
+            try:
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+                FIRE_IMPACT_SOUND = pygame.mixer.Sound(impact_path)
+            except Exception as e:
+                print(f"Failed to load fire impact sound: {e}")
+        else:
+            print("Fire impact sound not found at assets/sounds/towers/fire_impact.wav")
+
+
 class Projectile:
     """Represents a tower's projectile."""
     def __init__(self, start_pos, target, speed, color, size, proj_type=None):
@@ -138,6 +218,14 @@ class Tower:
         return closest_monster
 
     def attack(self, monster, monster_manager):
+        # Play shot sound for tower type
+        load_tower_sounds()
+        if self.tower_type == 'cannon' and CANNON_SHOT_SOUND:
+            CANNON_SHOT_SOUND.play()
+        elif self.tower_type == 'water' and ICE_SHOT_SOUND:
+            ICE_SHOT_SOUND.play()
+        elif self.tower_type == 'fire' and FIRE_SHOT_SOUND:
+            FIRE_SHOT_SOUND.play()
         # Create new projectile
         self.projectiles.append(Projectile(
             self.pos,
@@ -150,10 +238,24 @@ class Tower:
         self.attack_timer = self.attack_speed
 
     def update(self, dt, monster_manager, economy):
+        
+        if self.tower_type == 'cannon':
+            load_tower_sounds()
         # Update projectiles
         for proj in self.projectiles[:]:  # Copy list to safely remove while iterating
             proj.update(dt)
             if proj.update(dt):  # Returns True when hit target
+                # Play cannon impact sound for cannon tower
+                load_tower_sounds()
+                if self.tower_type == 'cannon' and CANNON_IMPACT_SOUND:
+                    CANNON_IMPACT_SOUND.play()
+                elif self.tower_type == 'water' and ICE_IMPACT_SOUND:
+                    ICE_IMPACT_SOUND.play()
+                elif self.tower_type == 'fire' and FIRE_IMPACT_SOUND:
+                    FIRE_IMPACT_SOUND.play()
+                
+                
+                
                 if self.splash_radius > 0:
                     # Area damage
                     for monster in monster_manager.monsters:
@@ -167,7 +269,7 @@ class Tower:
                             proj_img = Tower.projectile_images.get(self.projectile_type) if Tower.projectile_images else None
                             monster_manager.particles.emit((monster.pos[0], monster.pos[1] - monster.size), self.projectile_color, count=6, image=proj_img)
                             monster.take_damage(self.damage, monster_manager.particles)
-                            # Water tower: apply slow effect
+                            # Ice tower: apply slow effect
                             if self.tower_type == 'water':
                                 monster.apply_slow(0.9, 3.0)
                 else:
@@ -178,7 +280,7 @@ class Tower:
                     proj_img = Tower.projectile_images.get(self.projectile_type) if Tower.projectile_images else None
                     monster_manager.particles.emit((proj.target.pos[0], proj.target.pos[1] - proj.target.size), self.projectile_color, count=6, image=proj_img)
                     proj.target.take_damage(self.damage, monster_manager.particles)
-                    # Water tower: apply slow effect
+                    # Ice tower: apply slow effect
                     if self.tower_type == 'water':
                         proj.target.apply_slow(0.9, 3.0)
                 
@@ -221,6 +323,7 @@ class Tower:
 
 class TowerManager:
     """Manages all towers on the map."""
+    tower_placement_sound = None
     def __init__(self, path):
         self.towers = []
         self.path = path
@@ -237,6 +340,15 @@ class TowerManager:
         # Create and add the tower
         tower = Tower(tower_type, pos)
         self.towers.append(tower)
+        # Play tower placement sound if loaded
+        if TowerManager.tower_placement_sound is None:
+            import os
+            try:
+                TowerManager.tower_placement_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'tower_placement.wav'))
+            except Exception as e:
+                print(f"Failed to load tower_placement sound: {e}")
+        if TowerManager.tower_placement_sound:
+            TowerManager.tower_placement_sound.play()
         return True
 
     def handle_event(self, event, economy):

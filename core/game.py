@@ -17,6 +17,7 @@ class Game:
     def __init__(self, screen):
         self.screen = screen
         self.clock = pygame.time.Clock()
+        self.boss_music_playing = False
         self.restart_game()
     
     def restart_game(self):
@@ -39,6 +40,7 @@ class Game:
         self.state = 'preparation'  # 'wave', 'gameover', 'victory'
         self.selected_tower = None
         self.selected_tile = None
+        self.boss_music_playing = False
         
         # Boss and danger warning overlays
         self.boss_warning = BossWarning()
@@ -65,6 +67,15 @@ class Game:
             # Handle game over or completion restart
             if self.state in ('gameover', 'completed'):
                 if self.restart_button.collidepoint(mouse_pos):
+                    # Play button click sound
+                    if HUD.button_click_sound is None:
+                        import os
+                        try:
+                            HUD.button_click_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'button_click.wav'))
+                        except Exception as e:
+                            print(f"Failed to load button_click sound: {e}")
+                    if HUD.button_click_sound:
+                        HUD.button_click_sound.play()
                     self.restart_game()
                 return
             
@@ -111,15 +122,44 @@ class Game:
         # Track boss/danger warning triggers
         wave_num = self.wave_manager.wave_number
         wave_in_prog = self.wave_manager.wave_in_progress
-        # Trigger boss warning when boss wave starts
+        # Trigger boss warning and danger sound when boss wave starts
         if wave_num == 21 and wave_in_prog and not self._last_wave_in_progress:
             self.boss_warning.trigger()
+            # Play danger sound(s) as on every 5th wave
+            try:
+                from entities.monster import MonsterManager
+                if not hasattr(MonsterManager, 'danger_sound'):
+                    import os
+                    danger_path = os.path.join('assets', 'sounds', 'UI', 'danger.wav')
+                    if os.path.exists(danger_path):
+                        MonsterManager.danger_sound = pygame.mixer.Sound(danger_path)
+                if hasattr(MonsterManager, 'danger_sound') and MonsterManager.danger_sound:
+                    MonsterManager.danger_sound.play()
+                    # If there is a chained danger sound, set up the timer as in main.py
+                    MonsterManager._danger_sounds_left = 1
+                    pygame.time.set_timer(pygame.USEREVENT + 50, int(MonsterManager.danger_sound.get_length() * 1000), loops=1)
+            except Exception as e:
+                print(f"Failed to play danger sound on boss wave: {e}")
+            # Play boss music
+            boss_music_path = os.path.join('assets', 'sounds', 'ambient', 'boss_music.mp3')
+            if os.path.exists(boss_music_path):
+                try:
+                    pygame.mixer.music.load(boss_music_path)
+                    pygame.mixer.music.play(-1)  # Loop indefinitely
+                    self.boss_music_playing = True
+                except Exception as e:
+                    print(f"Failed to play boss music: {e}")
         # Trigger danger warning at the start of every 5th wave (except boss)
         if wave_num % 5 == 0 and wave_num < 21 and wave_in_prog and not self._last_wave_in_progress:
             self.danger_warning.trigger()
         self._last_wave_in_progress = wave_in_prog
         self.boss_warning.update(dt)
         self.danger_warning.update(dt)
+
+        # Stop boss music on game over or completed
+        if self.boss_music_playing and self.state in ('gameover', 'completed'):
+            pygame.mixer.music.stop()
+            self.boss_music_playing = False
 
         if self.state == 'playing':
             self.monster_manager.update(dt)
@@ -128,6 +168,21 @@ class Game:
             
             # Check victory/defeat conditions
             if self.base.hp <= 0:
+                # Play game over sound if not already played
+                if not hasattr(self, '_game_over_sound_played') or not self._game_over_sound_played:
+                    try:
+                        import os
+                        if not hasattr(self, '_game_over_sound'):
+                            sound_path = os.path.join('assets', 'sounds', 'UI', 'game over.wav')
+                            if os.path.exists(sound_path):
+                                self._game_over_sound = pygame.mixer.Sound(sound_path)
+                            else:
+                                self._game_over_sound = None
+                        if self._game_over_sound:
+                            self._game_over_sound.play()
+                        self._game_over_sound_played = True
+                    except Exception as e:
+                        print(f"Failed to play game over sound: {e}")
                 self.state = 'gameover'
             elif self.wave_manager.wave_number > TOTAL_WAVES:
                 boss_types = {'boss_gnome', 'boss_fast_spider', 'boss_big_spider'}
@@ -139,15 +194,15 @@ class Game:
         # --- Load world images (if not already loaded) ---
         if not hasattr(self, 'world_images'):
             self.world_images = {}
-            for name in ['grass', 'path_stone', 'tower_placement_foundation', 'rock', 'tree', 'dirt', 'hole']:
+            for name in ['grass', 'path_stone', 'tower_placement_foundation', 'rock1', 'rock2', 'tree', 'dirt1', 'dirt2', 'hole']:
                 img = pygame.image.load(os.path.join('assets', 'world', f'{name}.png')).convert_alpha()
                 self.world_images[name] = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE))
         grass_img = self.world_images['grass']
         path_img = self.world_images['path_stone']
         slot_img = self.world_images['tower_placement_foundation']
-        rock_img = self.world_images['rock']
+        rock_imgs = [self.world_images['rock1'], self.world_images['rock2']]
         tree_img = self.world_images['tree']
-        dirt_img = self.world_images['dirt']
+        dirt_imgs = [self.world_images['dirt1'], self.world_images['dirt2']]
         hole_img = self.world_images['hole']
 
         # Generate scene interest map once
@@ -161,23 +216,30 @@ class Game:
                         continue
                     r = random.random()
                     if r < 0.06:
-                        self.scene_interest_map[(x, y)] = 'rock'
+                        import random
+                        rock_choice = random.choice(['rock1', 'rock2'])
+                        self.scene_interest_map[(x, y)] = rock_choice
                     elif r < 0.12:
                         self.scene_interest_map[(x, y)] = 'tree'
                     elif r < 0.18:
-                        self.scene_interest_map[(x, y)] = 'dirt'
+                        import random
+                        dirt_choice = random.choice(['dirt1', 'dirt2'])
+                        self.scene_interest_map[(x, y)] = dirt_choice
                     # else: no detail
 
         # --- Draw background (grass) ---
-        # Cache rock scales and rotations for consistency
-        if not hasattr(self, 'rock_scales') or not hasattr(self, 'rock_rotations'):
+        # Cache rock/tree scales and rock rotations for consistency
+        if not hasattr(self, 'rock_scales') or not hasattr(self, 'rock_rotations') or not hasattr(self, 'tree_scales'):
             import random
             self.rock_scales = {}
             self.rock_rotations = {}
+            self.tree_scales = {}
             for pos, detail in getattr(self, 'scene_interest_map', {}).items():
-                if detail == 'rock':
+                if detail in ('rock1', 'rock2'):
                     self.rock_scales[pos] = random.uniform(0.4, 0.8)
                     self.rock_rotations[pos] = random.uniform(0, 360)
+                elif detail == 'tree':
+                    self.tree_scales[pos] = random.uniform(0.7, 1.15)
 
         for y in range(GRID_HEIGHT):
             for x in range(GRID_WIDTH):
@@ -185,7 +247,8 @@ class Game:
                 # Draw scene interest (details) on grass
                 if hasattr(self, 'scene_interest_map') and (x, y) in self.scene_interest_map:
                     detail = self.scene_interest_map[(x, y)]
-                    if detail == 'rock':
+                    if detail in ('rock1', 'rock2'):
+                        rock_img = self.world_images[detail]
                         scale = self.rock_scales.get((x, y), 0.6)
                         scaled_size = int(TILE_SIZE * scale)
                         scaled_rock = pygame.transform.smoothscale(rock_img, (scaled_size, scaled_size))
@@ -195,8 +258,14 @@ class Game:
                         rect = rotated_rock.get_rect(center=(x * TILE_SIZE + TILE_SIZE // 2, y * TILE_SIZE + TILE_SIZE // 2))
                         self.screen.blit(rotated_rock, rect.topleft)
                     elif detail == 'tree':
-                        self.screen.blit(tree_img, (x * TILE_SIZE, y * TILE_SIZE))
-                    elif detail == 'dirt':
+                        scale = self.tree_scales.get((x, y), 1.0)
+                        scaled_size = int(TILE_SIZE * scale)
+                        scaled_tree = pygame.transform.smoothscale(tree_img, (scaled_size, scaled_size))
+                        # Center the scaled tree in the tile
+                        rect = scaled_tree.get_rect(center=(x * TILE_SIZE + TILE_SIZE // 2, y * TILE_SIZE + TILE_SIZE // 2))
+                        self.screen.blit(scaled_tree, rect.topleft)
+                    elif detail in ('dirt1', 'dirt2'):
+                        dirt_img = self.world_images[detail]
                         self.screen.blit(dirt_img, (x * TILE_SIZE, y * TILE_SIZE))
 
         # --- Draw path (path_stone) ---

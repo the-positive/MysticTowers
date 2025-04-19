@@ -14,16 +14,22 @@ class WaveSelectMenu:
         self.button_margin = 10
         self.menu_rect = pygame.Rect(
             SCREEN_WIDTH - self.menu_width - 40, 80, self.menu_width, self.menu_height)
+        self.just_opened = False
 
     def open(self):
         self.visible = True
         self.selected_wave = None
+        self.just_opened = True
 
     def close(self):
         self.visible = False
 
     def handle_event(self, event):
         if not self.visible:
+            return None
+        if self.just_opened:
+            # Ignore the first click after opening
+            self.just_opened = False
             return None
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()

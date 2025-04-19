@@ -21,6 +21,17 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            # Danger sound chaining for every 5th wave
+            if event.type == pygame.USEREVENT + 50:
+                try:
+                    from entities.monster import MonsterManager
+                    if hasattr(MonsterManager, 'danger_sound') and getattr(MonsterManager, '_danger_sounds_left', 0) > 0:
+                        MonsterManager.danger_sound.play()
+                        MonsterManager._danger_sounds_left -= 1
+                        if MonsterManager._danger_sounds_left > 0:
+                            pygame.time.set_timer(pygame.USEREVENT + 50, int(MonsterManager.danger_sound.get_length() * 1000), loops=1)
+                except Exception as e:
+                    print(f"Error playing chained danger sound: {e}")
             game.handle_event(event)
         game.update()
         screen.fill((0, 0, 0))  # Clear the screen every frame

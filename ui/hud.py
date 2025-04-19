@@ -5,6 +5,8 @@ from .wave_select_menu import WaveSelectMenu
 
 class HUD:
     """Heads-up display for coins, HP, wave, and controls."""
+    button_click_sound = None
+    towerselection_click_sound = None
     def __init__(self, game):
         self.game = game
         self.font = pygame.font.SysFont('arial', 28)
@@ -12,6 +14,19 @@ class HUD:
         
         # Create buttons
         button_y = SCREEN_HEIGHT - BUTTON_MARGIN - BUTTON_SIZE
+        # Load button click sound if not already loaded
+        import os
+        if HUD.button_click_sound is None:
+            try:
+                HUD.button_click_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'button_click.wav'))
+            except Exception as e:
+                print(f"Failed to load button_click sound: {e}")
+        # Load towerselection click sound if not already loaded
+        if HUD.towerselection_click_sound is None:
+            try:
+                HUD.towerselection_click_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'towerselection_click.wav'))
+            except Exception as e:
+                print(f"Failed to load towerselection_click sound: {e}")
         self.start_wave_button = Button(
             SCREEN_WIDTH - BUTTON_MARGIN - BUTTON_SIZE,
             button_y,
@@ -67,11 +82,28 @@ class HUD:
         self.wave_select_menu.menu_rect.y = SCREEN_HEIGHT - BUTTON_MARGIN - BUTTON_SIZE - self.wave_select_menu.menu_height - 10
 
     def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            mouse_pos = event.pos if hasattr(event, 'pos') else pygame.mouse.get_pos()
+            for btn in [self.start_wave_button, self.tower_menu_button, self.gold_button, self.wave_select_button]:
+                dx = mouse_pos[0] - btn.x
+                dy = mouse_pos[1] - btn.y
+                btn.hovered = dx*dx + dy*dy <= btn.size*btn.size
+
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
-            # Always visually press these buttons on mouse down (for tactile feedback)
-            self.start_wave_button.pressed = True
-            self.tower_menu_button.pressed = True
+            # Only visually press the button that is hovered
+            if self.start_wave_button.hovered:
+                self.start_wave_button.pressed = True
+                if HUD.button_click_sound:
+                    HUD.button_click_sound.play()
+            if self.tower_menu_button.hovered:
+                self.tower_menu_button.pressed = True
+                if HUD.button_click_sound:
+                    HUD.button_click_sound.play()
+            if self.gold_button.hovered:
+                self.gold_button.pressed = True
+            if self.wave_select_button.hovered:
+                self.wave_select_button.pressed = True
 
             # Dev: Check gold button (for dev only)
             if self.gold_button.hovered:
@@ -91,6 +123,18 @@ class HUD:
             if self.tower_menu_button.hovered:
                 self.tower_menu_open = not self.tower_menu_open
 
+        elif event.type == pygame.MOUSEBUTTONUP:
+            # Reset pressed state for all buttons
+            self.start_wave_button.pressed = False
+            self.tower_menu_button.pressed = False
+            self.gold_button.pressed = False
+            self.wave_select_button.pressed = False
+
+        # Play button click for restart button (if present in HUD)
+        if hasattr(self, 'restart_button') and event.type == pygame.MOUSEBUTTONDOWN:
+            if self.restart_button.hovered and HUD.button_click_sound:
+                HUD.button_click_sound.play()
+
         # Handle wave select menu
         selected_wave = self.wave_select_menu.handle_event(event)
         if selected_wave is not None:
@@ -98,6 +142,28 @@ class HUD:
             self.game.wave_manager.wave_number = selected_wave - 1
             self.game.wave_manager.start_wave()
             self.game.state = 'playing'
+
+        # --- Tower selection menu: close on right click if nothing is selected ---
+        if self.tower_menu_open and event.type == pygame.MOUSEBUTTONDOWN:
+            mouse_pos = pygame.mouse.get_pos()
+            # Only close menu if click is outside the menu and button, and no tower is selected
+            menu_width = 250
+            menu_height = 240
+            menu_x = SCREEN_WIDTH - menu_width - BUTTON_MARGIN
+            menu_y = SCREEN_HEIGHT - menu_height - BUTTON_SIZE - BUTTON_MARGIN - BUTTON_SPACING
+            menu_rect = pygame.Rect(menu_x, menu_y, menu_width, menu_height)
+            if (event.button in (1, 3)
+                and self.game.tower_manager.selected_tower is None
+                and not menu_rect.collidepoint(mouse_pos)
+                and not self.tower_menu_button.hovered):
+                self.tower_menu_open = False
+                return
+            if hasattr(self, 'tower_buttons'):
+                for button_rect, tower_type in self.tower_buttons:
+                    if button_rect.collidepoint(mouse_pos):
+                        if HUD.towerselection_click_sound:
+                            HUD.towerselection_click_sound.play()
+                        break
 
     def draw(self, screen):
         # Draw game stats
@@ -155,7 +221,8 @@ class HUD:
                 text_color = COLORS['text'] if can_afford else (150, 150, 150)
                 
                 # Prepare all lines
-                text = f"{tower_type.title()} Tower (${cost})"
+                display_name = 'Ice' if tower_type == 'water' else tower_type.title()
+                text = f"{display_name} Tower (${cost})"
                 dmg_text = f"Damage: {stats['damage']}"
                 range_text = f"Range: {stats['range']}  Speed: {stats['attack_speed']}/s"
 
@@ -199,15 +266,17 @@ class HUD:
         pass
 
     def get_clicked_tower(self, mouse_pos):
-        """Check if a tower option was clicked in the menu."""
+        """Check if a tower option was clicked in the menu. Plays sound if selection is valid."""
         if not self.tower_menu_open:
             return None
-            
         for rect, tower_type in self.tower_buttons:
             if rect.collidepoint(mouse_pos):
                 # Prevent fire tower selection if locked
                 if tower_type == 'fire' and self.game.wave_manager.wave_number < 10:
                     return None
                 if self.game.economy.coins >= TOWER_COSTS[tower_type]:
+                    # Play tower selection sound only on valid selection
+                    if HUD.towerselection_click_sound:
+                        HUD.towerselection_click_sound.play()
                     return tower_type
         return None

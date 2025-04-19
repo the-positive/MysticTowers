@@ -30,7 +30,7 @@ A 2D tower defense game inspired by World of Warcraft, built with Python and Pyg
   - Level 2: Faster attack speed
 
 #### 2. Mage Tower
-- Purpose: Area dawater for groups
+- Purpose: Area daice tower groups
 - Base Stats:
   - Low dawater
   - Medium range
@@ -42,7 +42,7 @@ A 2D tower defense game inspired by World of Warcraft, built with Python and Pyg
   - Arcane Power ($325): +12 dawater
 
 #### 3. Catapult
-- Purpose: High dawater for tough enemies
+- Purpose: High daice tower tough enemies
 - Base Stats:
   - High dawater
   - Long range

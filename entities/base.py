@@ -4,12 +4,19 @@ from core.config import *
 
 class Base:
     """The player's base to defend."""
+    base_impact_sound = None
     def __init__(self):
         self.hp = BASE_HP
         self.max_hp = BASE_HP
         # Position will be set by the Game class using path.base_pos
         self.tile_pos = None
         self.pos = None
+        # Load base impact sound if not already loaded
+        if Base.base_impact_sound is None:
+            try:
+                Base.base_impact_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'base_impact.wav'))
+            except Exception as e:
+                print(f"Failed to load base_impact sound: {e}")
         
     def set_position(self, tile_x, tile_y):
         """Set the base position in tile coordinates."""
@@ -19,6 +26,19 @@ class Base:
     def take_damage(self, amount):
         """Take damage and return True if base is destroyed."""
         self.hp = max(0, self.hp - amount)
+        # Play impact sound if loaded and damage was taken
+        if amount > 0 and Base.base_impact_sound is not None:
+            Base.base_impact_sound.play()
+        # Play game over sound if destroyed
+        if self.hp == 0:
+            if not hasattr(Base, 'game_over_sound'):
+                import os
+                try:
+                    Base.game_over_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'game over.wav'))
+                except Exception as e:
+                    print(f"Failed to load game over sound: {e}")
+            if getattr(Base, 'game_over_sound', None):
+                Base.game_over_sound.play()
         return self.hp <= 0
 
     def draw(self, screen):

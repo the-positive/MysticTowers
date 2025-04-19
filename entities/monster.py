@@ -3,10 +3,56 @@ import math
 from core.config import *
 from entities.particle import ParticleManager
 from entities.sprite_utils import load_sprite_sheet
+import os
+
+death_sounds_loaded = False
+def play_monster_death_sound(monster_type):
+    """Play the correct death sound for the monster type."""
+    global death_sounds_loaded, MONSTER_DEATH_SOUND, GNOME_DEATH_SOUND, SPIDER_FAST_DEATH_SOUND, SPIDER_BIG_DEATH_SOUND
+    if not death_sounds_loaded:
+        MONSTER_DEATH_SOUND = None
+        GNOME_DEATH_SOUND = None
+        SPIDER_FAST_DEATH_SOUND = None
+        SPIDER_BIG_DEATH_SOUND = None
+        try:
+            path = os.path.join('assets', 'sounds', 'monsters', 'death.wav')
+            if os.path.exists(path):
+                MONSTER_DEATH_SOUND = pygame.mixer.Sound(path)
+        except Exception as e:
+            print(f"Failed to load death.wav: {e}")
+        try:
+            path = os.path.join('assets', 'sounds', 'monsters', 'gnome_death.wav')
+            if os.path.exists(path):
+                GNOME_DEATH_SOUND = pygame.mixer.Sound(path)
+        except Exception as e:
+            print(f"Failed to load gnome_death.wav: {e}")
+        try:
+            path = os.path.join('assets', 'sounds', 'monsters', 'spider_fast_death.wav')
+            if os.path.exists(path):
+                SPIDER_FAST_DEATH_SOUND = pygame.mixer.Sound(path)
+        except Exception as e:
+            print(f"Failed to load spider_fast_death.wav: {e}")
+        try:
+            path = os.path.join('assets', 'sounds', 'monsters', 'spider_big_death.wav')
+            if os.path.exists(path):
+                SPIDER_BIG_DEATH_SOUND = pygame.mixer.Sound(path)
+        except Exception as e:
+            print(f"Failed to load spider_big_death.wav: {e}")
+        death_sounds_loaded = True
+    # Always play generic death
+    if MONSTER_DEATH_SOUND:
+        MONSTER_DEATH_SOUND.play()
+    # Play specific sound for monster type (bosses use the same sound as their model)
+    if monster_type in ('gnome', 'boss_gnome') and GNOME_DEATH_SOUND:
+        GNOME_DEATH_SOUND.play()
+    elif monster_type in ('fast_spider', 'boss_fast_spider') and SPIDER_FAST_DEATH_SOUND:
+        SPIDER_FAST_DEATH_SOUND.play()
+    elif monster_type in ('big_spider', 'boss_big_spider') and SPIDER_BIG_DEATH_SOUND:
+        SPIDER_BIG_DEATH_SOUND.play()
 
 class Monster:
     """Base class for all monsters."""
-    def __init__(self, monster_type, path, base, economy):
+    def __init__(self, monster_type, path, base, economy, position_offset=0):
         # ... existing code ...
         self.slow_timer = 0
         self.slow_factor = 1.0
@@ -39,7 +85,30 @@ class Monster:
         
         # Position and movement
         self.path_index = 0
-        self.pos = list(self.path.points[0])  # Start at first path point
+        # Offset the starting position along the path if requested
+        if position_offset == 0:
+            self.pos = list(self.path.points[0])
+        else:
+            # Move position_offset pixels along the path direction
+            if len(self.path.points) > 1:
+                x0, y0 = self.path.points[0]
+                x1, y1 = self.path.points[1]
+                dx = x1 - x0
+                dy = y1 - y0
+                dist = math.hypot(dx, dy)
+                if dist > 0:
+                    ox = dx / dist * position_offset
+                    oy = dy / dist * position_offset
+                    self.pos = [x0 + ox, y0 + oy]
+                    # --- Fix: If the monster is closer to point 1 than point 0, increment path_index ---
+                    d0 = math.hypot(self.pos[0] - x0, self.pos[1] - y0)
+                    d1 = math.hypot(self.pos[0] - x1, self.pos[1] - y1)
+                    if d1 < d0:
+                        self.path_index = 1
+                else:
+                    self.pos = list(self.path.points[0])
+            else:
+                self.pos = list(self.path.points[0])
 
         # Sprite animation for gnome
         def load_and_scale(path):
@@ -176,6 +245,8 @@ class Monster:
         if particle_manager:
             particle_manager.emit((self.pos[0], self.pos[1] - self.size), self.color, count=8)
         if not self.is_alive():
+            # Play death sounds
+            play_monster_death_sound(self.type)
             # Give reward to player when monster dies
             self.economy.earn(self.reward)
             return True
@@ -251,8 +322,89 @@ class MonsterManager:
     def start_wave(self, wave_number, base):
         self.base = base  # Store base reference
         self.current_wave = wave_number  # Store for dynamic rewards
-        
+        # Set up monsters and mark wave as in progress
         import math
+        # Every 5th wave is a challenge wave: spawn 1.5x monsters
+        challenge_wave = (wave_number % 5 == 0 and wave_number <= 20)
+        if wave_number <= 5:
+            gnome_count = WAVE_CONFIGS['early']['gnome']['count'](wave_number)
+            if challenge_wave:
+                gnome_count = math.ceil(gnome_count * 1.5)
+            # For wave 5, add a group of 5 fast spiders
+            if wave_number == 5:
+                self.monsters_to_spawn = ['gnome'] * gnome_count + ['fast_spider'] * 5
+            else:
+                self.monsters_to_spawn = ['gnome'] * gnome_count
+        elif wave_number <= 15:
+            num_gnomes = WAVE_CONFIGS['mid']['gnome']['count'](wave_number)
+            num_wolves = WAVE_CONFIGS['mid']['fast_spider']['count'](wave_number)
+            num_big_spiders = WAVE_CONFIGS['mid']['big_spider']['count'](wave_number)
+            if challenge_wave:
+                num_gnomes = math.ceil(num_gnomes * 1.5)
+                num_wolves = math.ceil(num_wolves * 1.5)
+                num_big_spiders = math.ceil(num_big_spiders * 1.5)
+            # Mix in extra fast spiders on every even wave (not boss)
+            extra_spiders = 0
+            if wave_number % 2 == 0:
+                extra_spiders = 2 + wave_number // 6
+            self.monsters_to_spawn = (
+                ['gnome'] * num_gnomes +
+                ['fast_spider'] * (num_wolves + extra_spiders) +
+                ['big_spider'] * num_big_spiders
+            )
+        elif wave_number <= 20:
+            num_gnomes = WAVE_CONFIGS['late']['gnome']['count'](wave_number)
+            num_wolves = WAVE_CONFIGS['late']['fast_spider']['count'](wave_number)
+            num_big_spiders = WAVE_CONFIGS['late']['big_spider']['count'](wave_number)
+            if challenge_wave:
+                num_gnomes = math.ceil(num_gnomes * 1.5)
+                num_wolves = math.ceil(num_wolves * 1.5)
+                num_big_spiders = math.ceil(num_big_spiders * 1.5)
+            # Mix in extra fast spiders on every even wave (not boss)
+            extra_spiders = 0
+            if wave_number % 2 == 0:
+                extra_spiders = 2 + wave_number // 6
+            self.monsters_to_spawn = (
+                ['gnome'] * num_gnomes +
+                ['fast_spider'] * (num_wolves + extra_spiders) +
+                ['big_spider'] * num_big_spiders
+            )
+        else:
+            # Final Boss Wave: Giant version of each monster
+            self.monsters_to_spawn = ['boss_gnome', 'boss_fast_spider', 'boss_big_spider']
+        self.wave_in_progress = True
+        self.spawn_timer = 0
+        # Play wave start sound for normal waves, warning/danger for every 5th wave
+        import os
+        if wave_number % 5 == 0:
+            # Load warning/danger sounds if needed
+            if not hasattr(MonsterManager, 'warning_sound'):
+                try:
+                    MonsterManager.warning_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'warning.wav'))
+                except Exception as e:
+                    print(f"Failed to load warning sound: {e}")
+            if not hasattr(MonsterManager, 'danger_sound'):
+                try:
+                    MonsterManager.danger_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'danger.wav'))
+                except Exception as e:
+                    print(f"Failed to load danger sound: {e}")
+            # Play warning and danger at the same time, then chain a second danger after the first danger finishes
+            if getattr(MonsterManager, 'warning_sound', None):
+                MonsterManager.warning_sound.play()
+            if getattr(MonsterManager, 'danger_sound', None):
+                MonsterManager.danger_sound.play()
+                # Schedule only the second danger sound to play after the first finishes
+                pygame.time.set_timer(pygame.USEREVENT + 50, int(MonsterManager.danger_sound.get_length() * 1000), loops=1)
+                MonsterManager._danger_sounds_left = 1
+        else:
+            if not hasattr(MonsterManager, 'wave_start_sound'):
+                try:
+                    MonsterManager.wave_start_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'wave_start.wav'))
+                except Exception as e:
+                    print(f"Failed to load wave_start sound: {e}")
+            if getattr(MonsterManager, 'wave_start_sound', None):
+                MonsterManager.wave_start_sound.play()
+
         # Every 5th wave is a challenge wave: spawn 1.5x monsters
         challenge_wave = (wave_number % 5 == 0 and wave_number <= 20)
         if wave_number <= 5:
@@ -350,10 +502,10 @@ class MonsterManager:
                     self.monsters.append(Monster(monster_type, self.path, self.base, self.economy))
                 self.spawn_timer = 0  # Reset timer
 
-                # Starting on wave 5, 35% chance to immediately spawn next monster (not on boss wave)
+                # Starting on wave 5, 60% chance to immediately spawn next monster (not on boss wave)
                 import random
                 if self.current_wave >= 5 and self.current_wave != 21 and self.monsters_to_spawn:
-                    if random.random() < 0.35:
+                    if random.random() < 0.6:
                         monster_type = self.monsters_to_spawn.pop(0)
                         if monster_type == 'gnome':
                             if self.current_wave <= 5:
@@ -362,11 +514,13 @@ class MonsterManager:
                                 reward = 8 + (self.current_wave // 4)  # 8-11 gold
                             else:
                                 reward = 10 + (self.current_wave // 5)  # 10-14 gold
-                            monster = Monster(monster_type, self.path, self.base, self.economy)
+                            monster = Monster(monster_type, self.path, self.base, self.economy, position_offset=18)
                             monster.reward = reward
                             self.monsters.append(monster)
                         else:
-                            self.monsters.append(Monster(monster_type, self.path, self.base, self.economy))
+                            self.monsters.append(Monster(monster_type, self.path, self.base, self.economy, position_offset=18))
+                        last_spawn_offset = 0
+
 
         if not self.monsters_to_spawn and not self.monsters:
             self.wave_in_progress = False
