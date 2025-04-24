@@ -1,4 +1,5 @@
 import pygame
+from core.font_manager import get_font
 
 class DangerWarning:
     def __init__(self, duration=1.6):
@@ -8,7 +9,7 @@ class DangerWarning:
         self.flash_interval = 0.18
         self.flash_timer = 0
         self.visible = True
-        self.font = pygame.font.SysFont('arial', 48, bold=True)
+        self.font = get_font(48)
 
     def trigger(self):
         self.active = True

@@ -11,6 +11,7 @@ from .danger_warning import DangerWarning
 from entities.base import Base
 from ui.hud import HUD
 from ui.button import Button
+from .font_manager import get_font
 
 class Game:
     """Main game controller: manages state, updates, and rendering."""
@@ -22,6 +23,13 @@ class Game:
     
     def restart_game(self):
         """Reset the game state to start a new game."""
+        # Stop dangerouswave music if it's playing (on restart)
+        if hasattr(self, 'dangerouswave_playing') and self.dangerouswave_playing:
+            try:
+                pygame.mixer.Channel(5).stop()
+                self.dangerouswave_playing = False
+            except Exception as e:
+                print(f"Failed to stop dangerouswave music on restart: {e}")
         self.game_speed = 1.0
         self.paused = False
         
@@ -48,13 +56,13 @@ class Game:
         self._last_wave_in_progress = False
         
         # Game over screen
-        self.game_over_font = pygame.font.SysFont('arial', 64)
+        self.game_over_font = get_font(64)
         self.restart_button = pygame.Rect(
             SCREEN_WIDTH // 2 - 60,
             SCREEN_HEIGHT // 2 + 20,
             120, 40
         )
-        self.restart_text = pygame.font.SysFont('arial', 24).render('Restart?', True, (0, 0, 0))
+        self.restart_text = get_font(24).render('Restart?', True, (0, 0, 0))
     
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -69,7 +77,6 @@ class Game:
                 if self.restart_button.collidepoint(mouse_pos):
                     # Play button click sound
                     if HUD.button_click_sound is None:
-                        import os
                         try:
                             HUD.button_click_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'button_click.wav'))
                         except Exception as e:
@@ -129,7 +136,6 @@ class Game:
             try:
                 from entities.monster import MonsterManager
                 if not hasattr(MonsterManager, 'danger_sound'):
-                    import os
                     danger_path = os.path.join('assets', 'sounds', 'UI', 'danger.wav')
                     if os.path.exists(danger_path):
                         MonsterManager.danger_sound = pygame.mixer.Sound(danger_path)
@@ -149,9 +155,38 @@ class Game:
                     self.boss_music_playing = True
                 except Exception as e:
                     print(f"Failed to play boss music: {e}")
+        # Trigger dangerouswave music for waves 5, 10, 15 (not boss)
+        if wave_num in (5, 10, 15) and wave_in_prog and not self._last_wave_in_progress:
+            dangerouswave_path = os.path.join('assets', 'sounds', 'ambient', 'dangerouswave.mp3')
+            if os.path.exists(dangerouswave_path):
+                try:
+                    pygame.mixer.Channel(5).play(pygame.mixer.Sound(dangerouswave_path), loops=-1)
+                    self.dangerouswave_playing = True
+                except Exception as e:
+                    print(f"Failed to play dangerouswave music: {e}")
+        # Fade out dangerouswave when a new wave starts (and it's not a 5th wave), or on gameover/completed
+        if hasattr(self, 'dangerouswave_playing') and self.dangerouswave_playing:
+            # If a new wave just started and it's not a 5th wave, fade out
+            if (not wave_in_prog and self._last_wave_in_progress and self._last_wave_num in (5, 10, 15)):
+                self._dangerouswave_should_fade = True
+            if (wave_in_prog and not self._last_wave_in_progress and self._last_wave_num in (5, 10, 15) and wave_num not in (5, 10, 15)):
+                # Next wave started, not a 5th wave: fade out
+                try:
+                    pygame.mixer.Channel(5).fadeout(1500)
+                    self.dangerouswave_playing = False
+                except Exception as e:
+                    print(f"Failed to fade out dangerouswave music: {e}")
+            # Also stop immediately on gameover/completed
+            if self.state in ('gameover', 'completed'):
+                try:
+                    pygame.mixer.Channel(5).stop()
+                    self.dangerouswave_playing = False
+                except Exception as e:
+                    print(f"Failed to stop dangerouswave music: {e}")
         # Trigger danger warning at the start of every 5th wave (except boss)
         if wave_num % 5 == 0 and wave_num < 21 and wave_in_prog and not self._last_wave_in_progress:
             self.danger_warning.trigger()
+        self._last_wave_num = wave_num
         self._last_wave_in_progress = wave_in_prog
         self.boss_warning.update(dt)
         self.danger_warning.update(dt)
@@ -171,7 +206,6 @@ class Game:
                 # Play game over sound if not already played
                 if not hasattr(self, '_game_over_sound_played') or not self._game_over_sound_played:
                     try:
-                        import os
                         if not hasattr(self, '_game_over_sound'):
                             sound_path = os.path.join('assets', 'sounds', 'UI', 'game over.wav')
                             if os.path.exists(sound_path):
@@ -194,13 +228,16 @@ class Game:
         # --- Load world images (if not already loaded) ---
         if not hasattr(self, 'world_images'):
             self.world_images = {}
-            for name in ['grass', 'path_stone', 'tower_placement_foundation', 'rock1', 'rock2', 'tree', 'dirt1', 'dirt2', 'hole']:
+            for name in ['grass', 'path_stone', 'tower_placement_foundation', 'rock1', 'rock2', 'rock3', 'tree', 'dirt1', 'dirt2', 'hole']:
                 img = pygame.image.load(os.path.join('assets', 'world', f'{name}.png')).convert_alpha()
+                if name == 'hole':
+                    img = pygame.transform.rotate(img, -90)
                 self.world_images[name] = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE))
+
         grass_img = self.world_images['grass']
         path_img = self.world_images['path_stone']
         slot_img = self.world_images['tower_placement_foundation']
-        rock_imgs = [self.world_images['rock1'], self.world_images['rock2']]
+        rock_imgs = [self.world_images['rock1'], self.world_images['rock2'], self.world_images['rock3']]
         tree_img = self.world_images['tree']
         dirt_imgs = [self.world_images['dirt1'], self.world_images['dirt2']]
         hole_img = self.world_images['hole']
@@ -217,7 +254,7 @@ class Game:
                     r = random.random()
                     if r < 0.06:
                         import random
-                        rock_choice = random.choice(['rock1', 'rock2'])
+                        rock_choice = random.choice(['rock1', 'rock2', 'rock3'])
                         self.scene_interest_map[(x, y)] = rock_choice
                     elif r < 0.12:
                         self.scene_interest_map[(x, y)] = 'tree'
@@ -235,7 +272,7 @@ class Game:
             self.rock_rotations = {}
             self.tree_scales = {}
             for pos, detail in getattr(self, 'scene_interest_map', {}).items():
-                if detail in ('rock1', 'rock2'):
+                if detail in ('rock1', 'rock2', 'rock3'):
                     self.rock_scales[pos] = random.uniform(0.4, 0.8)
                     self.rock_rotations[pos] = random.uniform(0, 360)
                 elif detail == 'tree':
@@ -275,11 +312,12 @@ class Game:
         # Draw monster spawn hole above the path for visibility
         spawn_tile = self.path.path_tiles[0]
         HOLE_SCALE = 1.5
+        hole_img = self.world_images['hole']
         hole_size = int(TILE_SIZE * HOLE_SCALE)
         scaled_hole = pygame.transform.smoothscale(hole_img, (hole_size, hole_size))
-        # Center the hole on the spawn tile
         hole_offset = (TILE_SIZE - hole_size) // 2
         self.screen.blit(scaled_hole, (spawn_tile[0] * TILE_SIZE + hole_offset, spawn_tile[1] * TILE_SIZE + hole_offset))
+
 
         # --- Draw buildable slots (tower_placement_foundation) ---
         for x, y in self.path.buildable_tiles:
@@ -348,5 +386,3 @@ class Game:
             mouse_pos = pygame.mouse.get_pos()
             pygame.draw.circle(self.screen, (255, 255, 255, 128),
                             mouse_pos, TOWER_STATS[self.selected_tower]['range'] * TILE_SIZE, 1)
-            
-

@@ -343,6 +343,16 @@ class MonsterManager:
                 num_gnomes = math.ceil(num_gnomes * 1.5)
                 num_wolves = math.ceil(num_wolves * 1.5)
                 num_big_spiders = math.ceil(num_big_spiders * 1.5)
+            # Dramatically increase difficulty at wave 10
+            if wave_number == 10:
+                num_big_spiders = max(num_big_spiders, 10)
+                num_wolves += 5
+                num_gnomes += 3
+            # Dramatically increase monster count for wave 15+
+            if wave_number >= 15:
+                num_big_spiders = max(num_big_spiders, 14 + (wave_number-15)//2)
+                num_wolves += 5 + (wave_number-15)//2
+                num_gnomes += 3 + (wave_number-15)//3
             # Mix in extra fast spiders on every even wave (not boss)
             extra_spiders = 0
             if wave_number % 2 == 0:
@@ -352,6 +362,9 @@ class MonsterManager:
                 ['fast_spider'] * (num_wolves + extra_spiders) +
                 ['big_spider'] * num_big_spiders
             )
+            # Reduce spawn delay for wave 10+
+            if wave_number >= 10:
+                self.spawn_timer = -0.5  # Spawn first monster instantly, next ones faster
         elif wave_number <= 20:
             num_gnomes = WAVE_CONFIGS['late']['gnome']['count'](wave_number)
             num_wolves = WAVE_CONFIGS['late']['fast_spider']['count'](wave_number)
@@ -360,6 +373,16 @@ class MonsterManager:
                 num_gnomes = math.ceil(num_gnomes * 1.5)
                 num_wolves = math.ceil(num_wolves * 1.5)
                 num_big_spiders = math.ceil(num_big_spiders * 1.5)
+            # Dramatically increase difficulty at wave 10
+            if wave_number == 10:
+                num_big_spiders = max(num_big_spiders, 10)
+                num_wolves += 5
+                num_gnomes += 3
+            # Dramatically increase monster count for wave 15+
+            if wave_number >= 15:
+                num_big_spiders = max(num_big_spiders, 14 + (wave_number-15)//2)
+                num_wolves += 5 + (wave_number-15)//2
+                num_gnomes += 3 + (wave_number-15)//3
             # Mix in extra fast spiders on every even wave (not boss)
             extra_spiders = 0
             if wave_number % 2 == 0:
@@ -369,6 +392,9 @@ class MonsterManager:
                 ['fast_spider'] * (num_wolves + extra_spiders) +
                 ['big_spider'] * num_big_spiders
             )
+            # Reduce spawn delay for wave 10+
+            if wave_number >= 10:
+                self.spawn_timer = -0.5  # Spawn first monster instantly, next ones faster
         else:
             # Final Boss Wave: Giant version of each monster
             self.monsters_to_spawn = ['boss_gnome', 'boss_fast_spider', 'boss_big_spider']
@@ -424,6 +450,16 @@ class MonsterManager:
                 num_gnomes = math.ceil(num_gnomes * 1.5)
                 num_wolves = math.ceil(num_wolves * 1.5)
                 num_big_spiders = math.ceil(num_big_spiders * 1.5)
+            # Dramatically increase difficulty at wave 10
+            if wave_number == 10:
+                num_big_spiders = max(num_big_spiders, 10)
+                num_wolves += 5
+                num_gnomes += 3
+            # Dramatically increase monster count for wave 15+
+            if wave_number >= 15:
+                num_big_spiders = max(num_big_spiders, 14 + (wave_number-15)//2)
+                num_wolves += 5 + (wave_number-15)//2
+                num_gnomes += 3 + (wave_number-15)//3
             # Mix in extra fast spiders on every even wave (not boss)
             extra_spiders = 0
             if wave_number % 2 == 0:
@@ -433,6 +469,9 @@ class MonsterManager:
                 ['fast_spider'] * (num_wolves + extra_spiders) +
                 ['big_spider'] * num_big_spiders
             )
+            # Reduce spawn delay for wave 10+
+            if wave_number >= 10:
+                self.spawn_timer = -0.5  # Spawn first monster instantly, next ones faster
         elif wave_number <= 20:
             num_gnomes = WAVE_CONFIGS['late']['gnome']['count'](wave_number)
             num_wolves = WAVE_CONFIGS['late']['fast_spider']['count'](wave_number)
@@ -441,6 +480,16 @@ class MonsterManager:
                 num_gnomes = math.ceil(num_gnomes * 1.5)
                 num_wolves = math.ceil(num_wolves * 1.5)
                 num_big_spiders = math.ceil(num_big_spiders * 1.5)
+            # Dramatically increase difficulty at wave 10
+            if wave_number == 10:
+                num_big_spiders = max(num_big_spiders, 10)
+                num_wolves += 5
+                num_gnomes += 3
+            # Dramatically increase monster count for wave 15+
+            if wave_number >= 15:
+                num_big_spiders = max(num_big_spiders, 14 + (wave_number-15)//2)
+                num_wolves += 5 + (wave_number-15)//2
+                num_gnomes += 3 + (wave_number-15)//3
             # Mix in extra fast spiders on every even wave (not boss)
             extra_spiders = 0
             if wave_number % 2 == 0:
@@ -450,6 +499,9 @@ class MonsterManager:
                 ['fast_spider'] * (num_wolves + extra_spiders) +
                 ['big_spider'] * num_big_spiders
             )
+            # Reduce spawn delay for wave 10+
+            if wave_number >= 10:
+                self.spawn_timer = -0.5  # Spawn first monster instantly, next ones faster
         else:
             # Final Boss Wave: Giant version of each monster
             self.monsters_to_spawn = ['boss_gnome', 'boss_fast_spider', 'boss_big_spider']

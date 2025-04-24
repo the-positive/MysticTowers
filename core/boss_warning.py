@@ -1,4 +1,5 @@
 import pygame
+from core.font_manager import get_font
 
 class BossWarning:
     def __init__(self, duration=2.0):
@@ -8,7 +9,7 @@ class BossWarning:
         self.flash_interval = 0.2
         self.flash_timer = 0
         self.visible = True
-        self.font = pygame.font.SysFont('arial', 54, bold=True)
+        self.font = get_font(54)
 
     def trigger(self):
         self.active = True

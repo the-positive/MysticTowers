@@ -1,6 +1,10 @@
 import pygame
+import os
 from core.game import Game
 from core.config import SCREEN_WIDTH, SCREEN_HEIGHT
+
+# Get the directory where this script is located
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def main():
     pygame.init()
@@ -12,8 +16,9 @@ def main():
 
     # Hide the system cursor
     pygame.mouse.set_visible(False)
-    # Load and scale the custom cursor image
-    cursor_img = pygame.image.load('assets/UI/cursor_image.png').convert_alpha()
+    # Load and scale the custom cursor image using script-relative path
+    cursor_img_path = os.path.join(BASE_DIR, 'assets', 'UI', 'cursor_image.png')
+    cursor_img = pygame.image.load(cursor_img_path).convert_alpha()
     cursor_img = pygame.transform.smoothscale(cursor_img, (32, 32))
     cursor_offset = (16, 16)  # Center the cursor image
 

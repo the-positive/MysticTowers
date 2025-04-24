@@ -1,9 +1,11 @@
 import pygame
 from core.config import SCREEN_WIDTH, SCREEN_HEIGHT, COLORS
+from core.font_manager import get_font
 
 class WaveSelectMenu:
     def __init__(self, font, total_waves=21):
-        self.font = font
+        # Use our own font instead of the passed font
+        self.font = get_font(22)
         self.total_waves = total_waves
         self.visible = False
         self.selected_wave = None

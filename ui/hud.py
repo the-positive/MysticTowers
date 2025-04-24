@@ -1,7 +1,10 @@
 import pygame
 from core.config import *
+from core.font_manager import get_font
 from .button import Button
+from .image_button import ImageButton
 from .wave_select_menu import WaveSelectMenu
+from .coin_anim import CoinAnimation
 
 class HUD:
     """Heads-up display for coins, HP, wave, and controls."""
@@ -9,8 +12,8 @@ class HUD:
     towerselection_click_sound = None
     def __init__(self, game):
         self.game = game
-        self.font = pygame.font.SysFont('arial', 28)
-        self.small_font = pygame.font.SysFont('arial', 16)
+        self.font = get_font(28)
+        self.small_font = get_font(16)
         
         # Create buttons
         button_y = SCREEN_HEIGHT - BUTTON_MARGIN - BUTTON_SIZE
@@ -27,30 +30,23 @@ class HUD:
                 HUD.towerselection_click_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'UI', 'towerselection_click.wav'))
             except Exception as e:
                 print(f"Failed to load towerselection_click sound: {e}")
-        self.start_wave_button = Button(
+        # Use image-based buttons for start wave and tower menu
+        self.start_wave_button = ImageButton(
             SCREEN_WIDTH - BUTTON_MARGIN - BUTTON_SIZE,
             button_y,
             BUTTON_SIZE,
-            COLORS['start_wave'],
-            COLORS['start_wave_hover'],
-            '►',
-            self.font
+            'assets/ui/nextwave_button.png'
         )
-        
-        self.tower_menu_button = Button(
+        self.tower_menu_button = ImageButton(
             SCREEN_WIDTH - BUTTON_MARGIN - BUTTON_SIZE * 4,
             button_y,
             BUTTON_SIZE,
-            COLORS['tower_menu'],
-            COLORS['tower_menu_hover'],
-            '⚔',
-            self.font
+            'assets/ui/towermenu_button.png'
         )
-        
         self.tower_menu_open = False
 
         # Wave select font (for dev buttons)
-        self.wave_select_font = pygame.font.SysFont('arial', 18, bold=True)
+        self.wave_select_font = get_font(18)
 
         # Gold button (for dev)
         # Wave select button (for dev)
@@ -80,6 +76,14 @@ class HUD:
         # Move menu to left of HUD buttons, above bottom bar to avoid blocking tower slots
         self.wave_select_menu.menu_rect.x = SCREEN_WIDTH - BUTTON_MARGIN - BUTTON_SIZE * 5 - self.wave_select_menu.menu_width
         self.wave_select_menu.menu_rect.y = SCREEN_HEIGHT - BUTTON_MARGIN - BUTTON_SIZE - self.wave_select_menu.menu_height - 10
+
+        # Coin animation for HUD
+        self.coin_anim = CoinAnimation(size=32)
+        # Load wavehead image for HUD
+        self.wavehead_img = pygame.image.load(os.path.join('assets', 'ui', 'wavehead.png')).convert_alpha()
+        self.wavehead_img = pygame.transform.smoothscale(self.wavehead_img, (60, 60))
+        # Track last time for coin animation
+        self.last_anim_time = pygame.time.get_ticks() / 1000.0
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEMOTION:
@@ -166,15 +170,55 @@ class HUD:
                         break
 
     def draw(self, screen):
+        # Update coin animation with correct delta time
+        now = pygame.time.get_ticks() / 1000.0
+        dt = now - self.last_anim_time
+        self.last_anim_time = now
+        self.coin_anim.update(dt)
         # Draw game stats
         coins = self.game.economy.coins
-        hp = self.game.base.hp
+        # Remove HP from display
 
         # Draw gold button (for dev only)
         self.gold_button.draw(screen)
         wave = self.game.wave_manager.wave_number
-        text = self.font.render(f"Coins: {coins}   HP: {hp}   Wave: {wave}", True, COLORS['text'])
-        screen.blit(text, (20, 20))
+        
+        # Use MorrisRoman-Black font for the top stats display
+        stats_font = get_font(28, "morrisroman-black")
+        coin_text = stats_font.render(str(coins), True, COLORS['text'])
+        wave_text = stats_font.render(f"Wave: {wave}", True, COLORS['text'])
+        # Animate coin (already updated above)
+        coin_y = 20
+        coin_x = 0  # Flush to the left edge
+
+        # Calculate wavehead_y before bounding box math
+        wavehead_y = coin_y - 18  # Move up slightly for better centering
+        # Calculate bounding box for background rectangle
+        coin_w, coin_h = 32, 32
+        coin_text_w, coin_text_h = coin_text.get_size()
+        wavehead_w, wavehead_h = 60, 60
+        wave_text_w, wave_text_h = wave_text.get_size()
+        total_w = coin_w + 2 + coin_text_w + 16 + wavehead_w + 2 + wave_text_w
+        # Make rectangle height just enough for the text/images, with minimal vertical padding
+        min_y = min(coin_y, coin_y+2, wavehead_y, coin_y+2)
+        max_y = max(coin_y+coin_h, coin_y+2+coin_text_h, wavehead_y+wavehead_h, coin_y+2+wave_text_h)
+        total_h = max_y - min_y + 2  # 2px vertical padding
+        rect_x = 0  # Rectangle flush to the left
+        rect_y = min_y - 1
+        
+        # Draw semi-transparent background
+        bg_surf = pygame.Surface((total_w + 40, total_h), pygame.SRCALPHA)
+        bg_surf.fill((0, 0, 0, 110))
+        screen.blit(bg_surf, (rect_x, rect_y))
+
+        # Draw coin and text/images
+        self.coin_anim.draw(screen, coin_x, coin_y)
+        screen.blit(coin_text, (coin_x + 36, coin_y+2))
+        wavehead_x = coin_x + 36 + coin_text_w + 30
+        wavehead_y = coin_y - 18  # Move up slightly for better centering
+        screen.blit(self.wavehead_img, (wavehead_x, wavehead_y))
+        screen.blit(wave_text, (wavehead_x + 54, coin_y+2))
+
         
         # Draw buttons
         self.start_wave_button.draw(screen)
