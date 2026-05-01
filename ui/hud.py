@@ -59,10 +59,26 @@ class HUD:
             'W',
             self.wave_select_font
         )
+        # Options button: just above the wave select button
+        options_button_x = self.wave_select_button.x
+        options_button_y = self.wave_select_button.y - (BUTTON_SIZE // 2) - BUTTON_SPACING - 8
+        self.options_button = Button(
+            options_button_x,
+            options_button_y,
+            BUTTON_SIZE // 2,
+            (80, 80, 80),
+            (120, 120, 120),
+            '',
+            self.wave_select_font
+        )
+        # Options menu state
+        self.options_menu_open = False
+        self.quit_button_rect = None
+        self.restart_button_rect = None
         # Gold button: just above and lined up with the W button
-        gold_button_x = self.wave_select_button.x
-        # Ensure a clear gap: gold button height + BUTTON_SPACING + 8px between gold and W button
-        gold_button_y = self.wave_select_button.y - (BUTTON_SIZE // 2) - BUTTON_SPACING - (BUTTON_SIZE // 2) - 8
+        gold_button_x = self.options_button.x
+        # Ensure a clear gap: gold button height + BUTTON_SPACING + 8px between gold and options button
+        gold_button_y = self.options_button.y - (BUTTON_SIZE // 2) - BUTTON_SPACING - (BUTTON_SIZE // 2) - 8
         self.gold_button = Button(
             gold_button_x,
             gold_button_y,
@@ -88,7 +104,18 @@ class HUD:
     def handle_event(self, event):
         if event.type == pygame.MOUSEMOTION:
             mouse_pos = event.pos if hasattr(event, 'pos') else pygame.mouse.get_pos()
-            for btn in [self.start_wave_button, self.tower_menu_button, self.gold_button, self.wave_select_button]:
+            # If options menu is open, only track hover for menu buttons
+            if self.options_menu_open:
+                if self.quit_button_rect and self.quit_button_rect.collidepoint(mouse_pos):
+                    self.quit_hovered = True
+                else:
+                    self.quit_hovered = False
+                if self.restart_button_rect and self.restart_button_rect.collidepoint(mouse_pos):
+                    self.restart_hovered = True
+                else:
+                    self.restart_hovered = False
+                return
+            for btn in [self.start_wave_button, self.tower_menu_button, self.gold_button, self.wave_select_button, self.options_button]:
                 dx = mouse_pos[0] - btn.x
                 dy = mouse_pos[1] - btn.y
                 btn.hovered = dx*dx + dy*dy <= btn.size*btn.size
@@ -104,18 +131,35 @@ class HUD:
                 self.tower_menu_button.pressed = True
                 if HUD.button_click_sound:
                     HUD.button_click_sound.play()
+            if self.options_menu_open:
+                mouse_pos = pygame.mouse.get_pos()
+                # Only handle clicks for menu buttons
+                if self.quit_button_rect and self.quit_button_rect.collidepoint(mouse_pos):
+                    import sys
+                    pygame.quit()
+                    sys.exit()
+                elif self.restart_button_rect and self.restart_button_rect.collidepoint(mouse_pos):
+                    self.options_menu_open = False
+                    self.game.restart_game()
+                return
             if self.gold_button.hovered:
                 self.gold_button.pressed = True
             if self.wave_select_button.hovered:
                 self.wave_select_button.pressed = True
+            if self.options_button.hovered:
+                self.options_button.pressed = True
 
-            # Dev: Check gold button (for dev only)
-            if self.gold_button.hovered:
-                self.game.economy.coins += 1000
+                # Dev: Check gold button (for dev only)
+                if self.gold_button.hovered:
+                    self.game.economy.coins += 1000
 
             # Dev: Check wave select button
             if self.wave_select_button.hovered:
                 self.wave_select_menu.open()
+
+            # Options button opens options menu
+            if self.options_button.hovered:
+                self.options_menu_open = True
 
             # Check start wave button
             if self.start_wave_button.hovered:
@@ -169,6 +213,57 @@ class HUD:
                             HUD.towerselection_click_sound.play()
                         break
 
+    def draw_cog_icon(self, screen, x, y, size):
+        # Draw a simple cog icon using pygame drawing primitives
+        import math
+        # Outer circle
+        pygame.draw.circle(screen, (180, 180, 180), (x, y), size//2 - 2, 4)
+        # Draw 8 teeth
+        for i in range(8):
+            angle = i * math.pi / 4
+            x1 = int(x + math.cos(angle) * (size//2 - 2))
+            y1 = int(y + math.sin(angle) * (size//2 - 2))
+            x2 = int(x + math.cos(angle) * (size//2 + 4))
+            y2 = int(y + math.sin(angle) * (size//2 + 4))
+            pygame.draw.line(screen, (180, 180, 180), (x1, y1), (x2, y2), 3)
+        # Inner circle
+        pygame.draw.circle(screen, (100, 100, 100), (x, y), size//4, 0)
+
+    def draw_options_menu(self, screen):
+        # Draw semi-transparent overlay
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        screen.blit(overlay, (0, 0))
+        # Draw menu box
+        menu_width, menu_height = 320, 200
+        menu_x = (SCREEN_WIDTH - menu_width) // 2
+        menu_y = (SCREEN_HEIGHT - menu_height) // 2
+        menu_rect = pygame.Rect(menu_x, menu_y, menu_width, menu_height)
+        pygame.draw.rect(screen, (40, 40, 40), menu_rect, border_radius=16)
+        pygame.draw.rect(screen, (200, 200, 200), menu_rect, 4, border_radius=16)
+        # Draw title
+        font = get_font(32)
+        title_surf = font.render("Options", True, (255, 255, 255))
+        screen.blit(title_surf, (menu_x + (menu_width - title_surf.get_width()) // 2, menu_y + 24))
+        # Draw buttons
+        button_font = get_font(28)
+        btn_w, btn_h = 200, 48
+        btn_x = menu_x + (menu_width - btn_w) // 2
+        btn_y1 = menu_y + 70
+        btn_y2 = btn_y1 + btn_h + 20
+        # Quit Game button
+        self.quit_button_rect = pygame.Rect(btn_x, btn_y1, btn_w, btn_h)
+        quit_color = (180, 60, 60) if getattr(self, 'quit_hovered', False) else (120, 40, 40)
+        pygame.draw.rect(screen, quit_color, self.quit_button_rect, border_radius=12)
+        quit_text = button_font.render("Quit Game", True, (255, 255, 255))
+        screen.blit(quit_text, (btn_x + (btn_w - quit_text.get_width()) // 2, btn_y1 + (btn_h - quit_text.get_height()) // 2))
+        # Restart button
+        self.restart_button_rect = pygame.Rect(btn_x, btn_y2, btn_w, btn_h)
+        restart_color = (60, 180, 60) if getattr(self, 'restart_hovered', False) else (40, 120, 40)
+        pygame.draw.rect(screen, restart_color, self.restart_button_rect, border_radius=12)
+        restart_text = button_font.render("Restart", True, (255, 255, 255))
+        screen.blit(restart_text, (btn_x + (btn_w - restart_text.get_width()) // 2, btn_y2 + (btn_h - restart_text.get_height()) // 2))
+
     def draw(self, screen):
         # Update coin animation with correct delta time
         now = pygame.time.get_ticks() / 1000.0
@@ -180,7 +275,14 @@ class HUD:
         # Remove HP from display
 
         # Draw gold button (for dev only)
+        self.options_button.draw(screen)
+        # Draw cog icon in the center of the options button
+        self.draw_cog_icon(screen, self.options_button.x, self.options_button.y, self.options_button.size)
         self.gold_button.draw(screen)
+
+        # Draw options menu overlay if open
+        if self.options_menu_open:
+            self.draw_options_menu(screen)
         wave = self.game.wave_manager.wave_number
         
         # Use MorrisRoman-Black font for the top stats display
